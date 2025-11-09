@@ -1,0 +1,32 @@
+---
+# Создание Ingress для Argo CD с поддержкой Let's Encrypt через cert-manager
+- name: Создать Ingress для Argo CD
+  vars: { ansible_python_interpreter: "{{ ansible_py }}" }
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      metadata:
+        name: argocd-server
+        namespace: "{{ argocd_namespace }}"
+        annotations:
+          kubernetes.io/ingress.class: nginx
+          cert-manager.io/cluster-issuer: "{{ cluster_issuer_name }}"
+      spec:
+        ingressClassName: nginx
+        tls:
+          - hosts:
+              - "{{ argocd_hostname }}"
+            secretName: argocd-server-tls
+        rules:
+          - host: "{{ argocd_hostname }}"
+            http:
+              paths:
+                - path: /
+                  pathType: Prefix
+                  backend:
+                    service:
+                      name: "{{ argocd_server_name }}"
+                      port:
+                        number: 80

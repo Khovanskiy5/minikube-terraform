@@ -1,0 +1,25 @@
+---
+# Вывод итоговой информации для доступа к сервисам
+- name: Показать URL Argo CD (если включен)
+  ansible.builtin.debug:
+    msg: "Argo CD: https://{{ argocd_hostname }}"
+  when: enable_argocd
+
+- name: Показать подсказку по паролю Argo CD
+  ansible.builtin.shell: |
+    kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
+  environment: "{{ k8s_env }}"
+  register: argocd_admin_pass
+  changed_when: false
+  failed_when: false
+  when: enable_argocd
+
+- name: Пароль администратора Argo CD (если найден)
+  ansible.builtin.debug:
+    msg: "Пароль admin: {{ argocd_admin_pass.stdout | default('не обнаружен') }}"
+  when: enable_argocd
+
+- name: Информация о доступе к Harbor
+  ansible.builtin.debug:
+    msg: "Harbor: https://{{ registry_hostname }} (пользователь по умолчанию: admin, пароль по умолчанию Harbor12345)"
+  when: enable_harbor

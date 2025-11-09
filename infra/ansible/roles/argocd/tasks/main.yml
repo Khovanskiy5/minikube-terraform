@@ -1,0 +1,43 @@
+---
+# Установка Argo CD через Helm
+- name: Добавить/обновить Helm repo argo
+  vars: { ansible_python_interpreter: "{{ ansible_py }}" }
+  kubernetes.core.helm_repository:
+    name: argo
+    repo_url: https://argoproj.github.io/argo-helm
+    force_update: true
+
+- name: Создать namespace argocd
+  vars: { ansible_python_interpreter: "{{ ansible_py }}" }
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ argocd_namespace }}"
+
+- name: Установить/обновить Argo CD
+  vars: { ansible_python_interpreter: "{{ ansible_py }}" }
+  kubernetes.core.helm:
+    name: "{{ argocd_release_name }}"
+    chart_ref: argo/argo-cd
+    release_namespace: "{{ argocd_namespace }}"
+    create_namespace: true
+    values:
+      server:
+        service:
+          type: ClusterIP
+        extraArgs:
+          - --insecure
+      configs:
+        params:
+          server.insecure: true
+    wait: true
+    wait_timeout: 900s
+    state: present
+
+- name: Ждать готовности argo-cd-server
+  ansible.builtin.command: kubectl -n {{ argocd_namespace }} rollout status deploy/{{ argocd_server_name }} -w --timeout=600s
+  environment: "{{ k8s_env }}"
+  changed_when: false

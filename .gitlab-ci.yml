@@ -1,0 +1,60 @@
+stages:
+  - fmt
+  - lint
+  - validate
+
+variables:
+  TF_IN_AUTOMATION: "true"
+  TF_PLUGIN_CACHE_DIR: "$CI_PROJECT_DIR/.terraform-cache"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+cache:
+  paths:
+    - .terraform-cache/
+    - .cache/pip/
+
+fmt:terraform:
+  stage: fmt
+  image: hashicorp/terraform:1.6.6
+  script:
+    - cd infra/terraform
+    - terraform fmt -recursive -check
+
+lint:yaml:
+  stage: lint
+  image: cytopia/yamllint:1.35
+  script:
+    - yamllint -s .
+
+lint:markdown:
+  stage: lint
+  image: node:20-alpine
+  before_script:
+    - npm i -g markdownlint-cli@0.39.0
+  script:
+    - markdownlint "**/*.md" --ignore node_modules
+
+lint:ansible:
+  stage: lint
+  image: python:3.12-slim
+  before_script:
+    - pip install --no-cache-dir ansible==10.5.0 ansible-lint==24.9.0 yamllint==1.35.1
+    - ansible-galaxy collection install -r infra/ansible/requirements.yml --force
+  script:
+    - ansible-lint -v infra/ansible
+
+validate:terraform:
+  stage: validate
+  image: hashicorp/terraform:1.6.6
+  script:
+    - cd infra/terraform
+    - terraform init -backend=false
+    - terraform validate
+
+lint:tflint:
+  stage: validate
+  image: ghcr.io/terraform-linters/tflint-bundle:v0.53.0
+  script:
+    - cd infra/terraform
+    - tflint --init
+    - tflint --recursive

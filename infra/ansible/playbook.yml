@@ -1,0 +1,52 @@
+---
+- name: 🚀 Развертывание Minikube, Ingress-NGINX, cert-manager, Argo CD и Harbor на Ubuntu 24.04
+  hosts: minikube
+  gather_facts: yes
+  become: yes
+
+  collections:
+    - kubernetes.core
+
+  vars:
+    kubeconfig_path: "/home/{{ ansible_user }}/.kube/config"
+
+  module_defaults:
+    kubernetes.core.k8s:
+      kubeconfig: "{{ kubeconfig_path }}"
+    kubernetes.core.k8s_info:
+      kubeconfig: "{{ kubeconfig_path }}"
+    kubernetes.core.helm:
+      kubeconfig: "{{ kubeconfig_path }}"
+    kubernetes.core.helm_repository:
+      kubeconfig: "{{ kubeconfig_path }}"
+
+  pre_tasks:
+    - name: Проверка обязательных переменных
+      ansible.builtin.assert:
+        that:
+          - domain_name is defined and domain_name | length > 0
+          - email_address is defined and email_address | length > 3
+        fail_msg: "Не заданы DOMAIN и/или EMAIL (env)."
+      changed_when: false
+
+  roles:
+    - role: common
+    - role: docker
+    - role: kubernetes_tools
+    - role: systemd_units
+    - role: python_venv_k8s
+    - role: cluster_ready
+    - role: ingress_nginx
+      when: enable_ingress_nginx
+    - role: cert_manager
+      when: enable_cert_manager
+    - role: cluster_issuer
+      when: enable_cert_manager and enable_cluster_issuer
+    - role: argocd
+      when: enable_argocd
+    - role: argocd_ingress
+      when: enable_argocd and enable_argocd_ingress
+    - role: harbor
+      when: enable_harbor
+    - role: access
+      when: enable_argocd or enable_harbor

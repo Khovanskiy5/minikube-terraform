@@ -1,0 +1,53 @@
+---
+# Установка cert-manager
+- name: Проверить доступность charts.jetstack.io
+  ansible.builtin.uri:
+    url: "https://charts.jetstack.io/index.yaml"
+    method: GET
+    return_content: no
+    status_code: 200
+    timeout: 30
+    validate_certs: yes
+  register: jetstack_probe
+  retries: 5
+  delay: 5
+  until: jetstack_probe.status == 200
+  changed_when: false
+
+- name: Добавить/обновить Helm repo jetstack
+  vars: { ansible_python_interpreter: "{{ ansible_py }}" }
+  kubernetes.core.helm_repository:
+    name: jetstack
+    repo_url: "{{ jetstack_repo }}"
+    force_update: true
+
+- name: Обновить индексы Helm репозиториев
+  ansible.builtin.command: helm repo update
+  environment: "{{ k8s_env }}"
+  register: helm_repo_update
+  changed_when: "'Update Complete' in helm_repo_update.stdout"
+  failed_when: false
+
+- name: Установить/обновить cert-manager (CRDs включены)
+  vars: { ansible_python_interpreter: "{{ ansible_py }}" }
+  kubernetes.core.helm:
+    name: cert-manager
+    chart_ref: jetstack/cert-manager
+    chart_version: "{{ cert_manager_chart_version }}"
+    release_namespace: cert-manager
+    create_namespace: true
+    values:
+      crds:
+        enabled: true
+    wait: true
+    wait_timeout: 900s
+    state: present
+
+- name: Ждать CRD clusterissuers.cert-manager.io
+  ansible.builtin.command: kubectl get crd clusterissuers.cert-manager.io
+  environment: "{{ k8s_env }}"
+  register: crd_check
+  retries: 60
+  delay: 2
+  changed_when: false
+  until: crd_check.rc == 0

@@ -1,0 +1,47 @@
+---
+# Установка Harbor (опционально) через Helm
+- name: Добавить/обновить Helm repo Harbor
+  vars: { ansible_python_interpreter: "{{ ansible_py }}" }
+  kubernetes.core.helm_repository:
+    name: harbor
+    repo_url: "{{ harbor_repo }}"
+    force_update: true
+
+- name: Создать namespace {{ registry_namespace }}
+  vars: { ansible_python_interpreter: "{{ ansible_py }}" }
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ registry_namespace }}"
+
+- name: Установить/обновить Harbor
+  vars: { ansible_python_interpreter: "{{ ansible_py }}" }
+  kubernetes.core.helm:
+    name: "{{ harbor_release_name }}"
+    chart_ref: harbor/harbor
+    chart_version: "{{ harbor_chart_version | default(omit) }}"
+    release_namespace: "{{ registry_namespace }}"
+    create_namespace: true
+    values:
+      expose:
+        type: ingress
+        tls:
+          enabled: true
+          certSource: secret
+          secret:
+            secretName: "{{ harbor_tls_secret_name }}"
+        ingress:
+          hosts:
+            core: "{{ registry_hostname }}"
+          controller: default
+          className: nginx
+          annotations:
+            cert-manager.io/cluster-issuer: "{{ cluster_issuer_name }}"
+            kubernetes.io/tls-acme: "true"
+      externalURL: "https://{{ registry_hostname }}"
+    wait: true
+    wait_timeout: 1200s
+    state: present

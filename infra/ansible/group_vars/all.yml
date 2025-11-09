@@ -1,0 +1,73 @@
+# Глобальные переменные Ansible
+---
+# Входные параметры (читаются из переменных окружения)
+domain_name: "{{ lookup('env', 'DOMAIN') }}"
+argocd_subdomain: "{{ lookup('env', 'ARGOCD_SUBDOMAIN') | default('argocd', true) }}"
+email_address: "{{ lookup('env', 'EMAIL') }}"
+kubectl_version: "{{ lookup('env', 'KUBECTL_VERSION') | default('v1.28.0', true) }}"
+
+# Фича-флаги (toggles)
+# Приводим строки из окружения к булевым значениям надёжно:
+# 1) убираем inline‑комментарии справа (после #)
+# 2) trim
+# 3) lower
+# 4) bool
+letsencrypt_staging: "{{ (lookup('env','LETSENCRYPT_STAGING') | default('false', true) | regex_replace('\\s*#.*$', '') | trim | lower) | bool }}"
+enable_ingress_nginx: "{{ (lookup('env','ENABLE_INGRESS_NGINX') | default('true', true) | regex_replace('\\s*#.*$', '') | trim | lower) | bool }}"
+enable_cert_manager: "{{ (lookup('env','ENABLE_CERT_MANAGER') | default('true', true) | regex_replace('\\s*#.*$', '') | trim | lower) | bool }}"
+enable_cluster_issuer: "{{ (lookup('env','ENABLE_CLUSTER_ISSUER') | default('true', true) | regex_replace('\\s*#.*$', '') | trim | lower) | bool }}"
+enable_argocd: "{{ (lookup('env','ENABLE_ARGOCD') | default('true', true) | regex_replace('\\s*#.*$', '') | trim | lower) | bool }}"
+enable_argocd_ingress: "{{ (lookup('env','ENABLE_ARGOCD_INGRESS') | default('true', true) | regex_replace('\\s*#.*$', '') | trim | lower) | bool }}"
+enable_harbor: "{{ (lookup('env','ENABLE_HARBOR') | default('false', true) | regex_replace('\\s*#.*$', '') | trim | lower) | bool }}"
+
+# Пользователь и пути
+kube_user: "{{ ansible_user }}"
+kube_home: "/home/{{ ansible_user }}"
+kubeconfig_path: "/home/{{ ansible_user }}/.kube/config"
+minikube_home: "/home/{{ ansible_user }}/.minikube"
+
+# Вычисляемые значения
+argocd_hostname: "{{ argocd_subdomain }}.{{ domain_name }}"
+cluster_issuer_name: "{{ 'letsencrypt-staging' if letsencrypt_staging else 'letsencrypt-prod' }}"
+acme_server: "{{ 'https://acme-staging-v02.api.letsencrypt.org/directory' if letsencrypt_staging else 'https://acme-v02.api.letsencrypt.org/directory' }}"
+
+# Harbor / Registry — формирование FQDN аналогично Argo CD
+registry_subdomain: "{{ lookup('env','REGISTRY_SUBDOMAIN') | default('registry', true) }}"
+registry_hostname: "{{ registry_subdomain }}.{{ domain_name }}"
+registry_namespace: "harbor"
+harbor_release_name: "harbor"
+harbor_chart_version: ""   # можно зафиксировать версию, например "1.15.0"
+harbor_tls_secret_name: "harbor-tls"
+registry_storage_size: "100Gi"
+registry_storage_class: ""  # оставить пустым для default StorageClass
+
+# Репозитории
+cert_manager_chart_version: "v1.19.1"
+jetstack_repo: "https://charts.jetstack.io"
+ingress_nginx_repo: "https://kubernetes.github.io/ingress-nginx"
+harbor_repo: "https://helm.goharbor.io"
+
+# Пути systemd
+minikube_unit_path: "/etc/systemd/system/minikube.service"
+tunnel_unit_path: "/etc/systemd/system/minikube-tunnel.service"
+
+# Python venv для модулей kubernetes.core
+ansible_k8s_venv: "/opt/ansible-k8s-venv"
+ansible_py: "/opt/ansible-k8s-venv/bin/python"
+
+# Общая среда для minikube/kubectl
+k8s_env:
+  HOME: "{{ kube_home }}"
+  USER: "{{ kube_user }}"
+  MINIKUBE_HOME: "{{ minikube_home }}"
+  KUBECONFIG: "{{ kubeconfig_path }}"
+  PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+
+# Argo CD релиз и имена ресурсов (во избежание расхождений с Helm fullname)
+argocd_namespace: "argocd"
+argocd_release_name: "argo-cd"
+argocd_server_name: "{{ argocd_release_name }}-argocd-server"
+
+# Helm plugins
+helm_diff_version: "v3.9.8"

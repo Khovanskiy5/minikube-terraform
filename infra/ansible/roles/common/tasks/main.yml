@@ -1,0 +1,24 @@
+---
+# Общие подготовительные задачи: обновление apt и установка базовых инструментов
+- name: Обновление APT кэша
+  ansible.builtin.apt:
+    update_cache: yes
+
+- name: Установка базовых инструментов
+  ansible.builtin.apt:
+    name:
+      - curl
+      - wget
+      - git
+      - jq
+      - apt-transport-https
+      - ca-certificates
+      - gnupg
+      - lsb-release
+      - net-tools
+      - conntrack
+      - uidmap
+      - python3-venv
+      - python3-pip
+      - openssl
+    state: present

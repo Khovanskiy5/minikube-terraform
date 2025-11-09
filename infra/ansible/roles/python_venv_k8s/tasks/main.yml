@@ -1,0 +1,21 @@
+---
+# Python venv для модулей kubernetes.core
+- name: Создать venv для k8s модулей
+  ansible.builtin.command: "python3 -m venv {{ ansible_k8s_venv }}"
+  args:
+    creates: "{{ ansible_k8s_venv }}/bin/activate"
+
+- name: Обновить pip/setuptools/wheel в venv
+  ansible.builtin.command: "{{ ansible_k8s_venv }}/bin/pip install --upgrade pip setuptools wheel"
+  changed_when: false
+
+- name: Установить Python зависимости для kubernetes.core в venv
+  ansible.builtin.pip:
+    name:
+      - "kubernetes>=17.17.0"
+      - "PyYAML>=5.3"
+      - jsonpatch
+      - openshift
+      - jmespath
+    virtualenv: "{{ ansible_k8s_venv }}"
+    virtualenv_command: python3 -m venv

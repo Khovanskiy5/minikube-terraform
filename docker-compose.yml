@@ -1,0 +1,83 @@
+services:
+  # ==================== TERRAFORM КОНТЕЙНЕР ====================
+  terraform:
+    image: hashicorp/terraform:1.6.6
+    working_dir: /workspace/infra/terraform
+
+    # Загружаем переменные из .env файла
+    env_file:
+      - ./.env
+
+    # Явно переопределяем переменные для Terraform
+    environment:
+      # ===== YANDEX CLOUD =====
+      TF_VAR_yc_oauth_token: ${YC_OAUTH_TOKEN}
+      TF_VAR_yc_cloud_id: ${YC_CLOUD_ID}
+      TF_VAR_yc_folder_id: ${YC_FOLDER_ID}
+      TF_VAR_yc_zone: ${YC_ZONE}
+
+      # ===== VM ПАРАМЕТРЫ =====
+      TF_VAR_vm_name: ${VM_NAME}
+      TF_VAR_vm_username: ${VM_USERNAME}
+      TF_VAR_ssh_public_key: ${SSH_PUBLIC_KEY:-/root/.ssh/id_rsa.pub}
+      TF_VAR_image_id: ${IMAGE_ID}
+      TF_VAR_vm_cores: ${VM_CORES}
+      TF_VAR_vm_memory: ${VM_MEMORY}
+      TF_VAR_vm_disk_size: ${VM_DISK_SIZE}
+
+      # ===== TERRAFORM CONFIG =====
+      TF_IN_AUTOMATION: "true"
+      TF_CLI_CONFIG_FILE: "/workspace/infra/terraform/.terraformrc"
+      TF_PLUGIN_CACHE_DIR: "/workspace/.terraform-cache"
+
+    # Монтируем директории для доступа к файлам
+    volumes:
+      - .:/workspace:rw
+      - ${HOME}/.ssh/id_rsa.pub:/root/.ssh/id_rsa.pub:ro
+
+  # ==================== ANSIBLE КОНТЕЙНЕР ====================
+  ansible:
+    build:
+      context: ./infra/ansible
+    image: local/ansible-runner:py3.12
+    working_dir: /workspace/infra/ansible
+
+    # Загружаем переменные из .env файла
+    env_file:
+      - ./.env
+
+    # Явно переопределяем переменные для Ansible
+    environment:
+      # Отключаем проверку хостов SSH (по умолчанию)
+      ANSIBLE_HOST_KEY_CHECKING: "False"
+      ANSIBLE_INVENTORY: ./inventory.ini
+      ANSIBLE_PYTHON_INTERPRETER: auto_silent
+      ANSIBLE_REMOTE_TEMP: /tmp
+      ANSIBLE_BECOME_METHOD: sudo
+
+      # Передаем переменные для playbook
+      DOMAIN: ${DOMAIN}
+      ARGOCD_SUBDOMAIN: ${ARGOCD_SUBDOMAIN:-argocd}
+      EMAIL: ${EMAIL}
+      KUBECTL_VERSION: ${KUBECTL_VERSION:-v1.28.0}
+
+      # Фича-флаги
+      LETSENCRYPT_STAGING: ${LETSENCRYPT_STAGING:-false}
+      ENABLE_INGRESS_NGINX: ${ENABLE_INGRESS_NGINX:-true}
+      ENABLE_CERT_MANAGER: ${ENABLE_CERT_MANAGER:-true}
+      ENABLE_CLUSTER_ISSUER: ${ENABLE_CLUSTER_ISSUER:-true}
+      ENABLE_ARGOCD: ${ENABLE_ARGOCD:-true}
+      ENABLE_ARGOCD_INGRESS: ${ENABLE_ARGOCD_INGRESS:-true}
+      ENABLE_HARBOR: ${ENABLE_HARBOR:-false}
+      REGISTRY_SUBDOMAIN: ${REGISTRY_SUBDOMAIN:-registry}
+
+    # Монтируем директории
+    volumes:
+      - .:/workspace:rw
+      - ${HOME}/.ssh/id_rsa:/root/.ssh/id_rsa:ro
+      - ${HOME}/.ssh/id_rsa.pub:/root/.ssh/id_rsa.pub:ro
+      - ${HOME}/.ssh/known_hosts:/root/.ssh/known_hosts:rw
+
+volumes:
+  terraform-cache:
+    driver: local

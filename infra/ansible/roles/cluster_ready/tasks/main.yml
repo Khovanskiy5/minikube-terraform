@@ -1,0 +1,43 @@
+---
+# Ожидание готовности кластера Minikube
+- name: Очистить возможные juju‑lock файлы
+  ansible.builtin.shell: "rm -rf /tmp/juju-* || true"
+  args: { executable: /bin/bash }
+  changed_when: false
+
+- name: Убедиться, что ключевые каталоги принадлежат пользователю
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    recurse: yes
+    owner: "{{ kube_user }}"
+    group: "{{ kube_user }}"
+  loop:
+    - "{{ kube_home }}/.kube"
+    - "{{ kube_home }}/.minikube"
+
+- name: Ждать доступности API
+  ansible.builtin.command: kubectl cluster-info
+  environment: "{{ k8s_env }}"
+  register: ci_out
+  retries: 60
+  delay: 5
+  changed_when: false
+  until: ci_out.rc == 0
+
+- name: Убедиться, что профиль minikube активен
+  become_user: "{{ kube_user }}"
+  environment: "{{ k8s_env }}"
+  ansible.builtin.command: minikube -p minikube status --output=json
+  register: mk_status
+  changed_when: false
+  failed_when: mk_status.rc != 0
+
+- name: Проверка статуса узлов (Ready)
+  ansible.builtin.command: kubectl get nodes --no-headers
+  environment: "{{ k8s_env }}"
+  register: nodes_out
+  retries: 60
+  delay: 5
+  changed_when: false
+  until: nodes_out.rc == 0 and (' Ready ' in nodes_out.stdout)

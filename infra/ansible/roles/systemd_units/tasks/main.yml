@@ -1,0 +1,94 @@
+---
+# Создание и активация systemd юнитов для minikube и minikube-tunnel
+- name: Юнит systemd minikube
+  ansible.builtin.copy:
+    dest: "{{ minikube_unit_path }}"
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Minikube Kubernetes Cluster
+      After=network-online.target docker.service
+      Wants=network-online.target docker.service
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      User={{ kube_user }}
+      Group={{ kube_user }}
+      ExecStartPre=/bin/bash -lc '[ ! -d "{{ minikube_home }}/profiles/minikube" ] || /usr/local/bin/minikube delete -p minikube'
+      ExecStartPre=/bin/bash -lc 'docker info >/dev/null'
+      Environment="HOME={{ kube_home }}"
+      Environment="USER={{ kube_user }}"
+      Environment="MINIKUBE_HOME={{ minikube_home }}"
+      Environment="KUBECONFIG={{ kubeconfig_path }}"
+      Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ExecStart=/usr/local/bin/minikube start --driver=docker --container-runtime=docker --profile=minikube
+      ExecStop=/usr/local/bin/minikube stop --profile=minikube
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Юнит systemd minikube-tunnel
+  ansible.builtin.copy:
+    dest: "{{ tunnel_unit_path }}"
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=minikube-tunnel
+      After=network-online.target minikube.service
+      Wants=network-online.target minikube.service
+
+      [Service]
+      Type=simple
+      User={{ kube_user }}
+      Group={{ kube_user }}
+      Environment="HOME={{ kube_home }}"
+      Environment="USER={{ kube_user }}"
+      Environment="MINIKUBE_HOME={{ minikube_home }}"
+      Environment="KUBECONFIG={{ kubeconfig_path }}"
+      Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ExecStart=/usr/local/bin/minikube tunnel --bind-address=0.0.0.0 --cleanup=true --profile=minikube
+      ExecStop=/usr/bin/pkill -f "minikube tunnel --bind-address=0.0.0.0 --cleanup=true --profile=minikube"
+      Restart=always
+      RestartSec=5
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Перезагрузить systemd
+  ansible.builtin.systemd:
+    daemon_reload: yes
+
+# ВАЖНО: До запуска сервиса minikube убедимся, что каталоги и kubeconfig
+# принадлежат целевому пользователю. Иначе minikube падает с HOST_HOME_PERMISSION.
+- name: Убедиться, что каталоги kube принадлежат пользователю перед запуском
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    recurse: yes
+    owner: "{{ kube_user }}"
+    group: "{{ kube_user }}"
+    mode: '0755'
+  loop:
+    - "{{ kube_home }}/.kube"
+    - "{{ minikube_home }}"
+
+- name: Исправить права kubeconfig
+  ansible.builtin.file:
+    path: "{{ kubeconfig_path }}"
+    owner: "{{ kube_user }}"
+    group: "{{ kube_user }}"
+    mode: '0644'
+  when: kubeconfig_path is defined
+
+- name: Включить и запустить minikube
+  ansible.builtin.systemd:
+    name: minikube
+    enabled: yes
+    state: started
+
+- name: Включить и запустить minikube-tunnel
+  ansible.builtin.systemd:
+    name: minikube-tunnel
+    enabled: yes
+    state: started

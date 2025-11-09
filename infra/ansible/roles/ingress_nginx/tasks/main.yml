@@ -1,0 +1,40 @@
+---
+# Установка ingress-nginx через Helm и ожидание готовности
+- name: Добавить/обновить Helm repo ingress-nginx
+  vars: { ansible_python_interpreter: "{{ ansible_py }}" }
+  kubernetes.core.helm_repository:
+    name: ingress-nginx
+    repo_url: "{{ ingress_nginx_repo }}"
+    force_update: true
+
+- name: Установить/обновить ingress-nginx (Service=LoadBalancer)
+  vars: { ansible_python_interpreter: "{{ ansible_py }}" }
+  kubernetes.core.helm:
+    name: ingress-nginx
+    chart_ref: ingress-nginx/ingress-nginx
+    release_namespace: ingress-nginx
+    create_namespace: true
+    values:
+      controller:
+        watchIngressWithoutClass: true
+        ingressClassResource:
+          name: nginx
+          controllerValue: "k8s.io/ingress-nginx"
+          default: true
+        service:
+          type: LoadBalancer
+    wait: true
+    wait_timeout: 900s
+    state: present
+
+- name: Ждать готовности ingress-nginx controller (Ready pod)
+  ansible.builtin.shell: |
+    set -o pipefail
+    kubectl -n ingress-nginx get deploy ingress-nginx-controller -o json | jq -e '.status.availableReplicas>=1' >/dev/null
+  environment: "{{ k8s_env }}"
+  args: { executable: /bin/bash }
+  register: ing_ready
+  retries: 60
+  delay: 10
+  changed_when: false
+  until: ing_ready.rc == 0

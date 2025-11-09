@@ -1,0 +1,10 @@
+skip_list:
+  - yaml
+  - name[casing]
+  - var-naming
+  - experimental
+warn_list:
+  - command-instead-of-module
+  - risky-shell-pipe
+  - no-changed-when
+parseable: true

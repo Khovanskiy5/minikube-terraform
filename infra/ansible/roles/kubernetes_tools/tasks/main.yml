@@ -1,0 +1,120 @@
+---
+# Установка kubectl, minikube и helm; подготовка kubeconfig
+- name: Создать .kube и .minikube каталоги
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ kube_user }}"
+    group: "{{ kube_user }}"
+    mode: '0755'
+  loop:
+    - "{{ kube_home }}/.kube"
+    - "{{ minikube_home }}"
+
+- name: Создать пустой kubeconfig если отсутствует
+  ansible.builtin.copy:
+    dest: "{{ kubeconfig_path }}"
+    content: |
+      apiVersion: v1
+      kind: Config
+      preferences: {}
+      clusters: []
+      contexts: []
+      users: []
+    owner: "{{ kube_user }}"
+    group: "{{ kube_user }}"
+    mode: '0644'
+  args:
+    force: no
+
+- name: Проверить наличие kubectl
+  ansible.builtin.stat:
+    path: /usr/local/bin/kubectl
+  register: kubectl_bin
+
+- name: Установить kubectl {{ kubectl_version }}
+  ansible.builtin.get_url:
+    url: "https://dl.k8s.io/release/{{ kubectl_version }}/bin/linux/amd64/kubectl"
+    dest: "/usr/local/bin/kubectl"
+    mode: '0755'
+  when: not kubectl_bin.stat.exists
+
+- name: Проверить kubectl
+  ansible.builtin.command: kubectl version --client
+  environment: "{{ k8s_env }}"
+  changed_when: false
+
+- name: Проверить наличие minikube
+  ansible.builtin.stat:
+    path: /usr/local/bin/minikube
+  register: minikube_bin
+
+- name: Установить minikube
+  ansible.builtin.get_url:
+    url: "https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-amd64"
+    dest: "/usr/local/bin/minikube"
+    mode: '0755'
+  when: not minikube_bin.stat.exists
+
+- name: Проверить minikube
+  ansible.builtin.command: minikube version
+  environment: "{{ k8s_env }}"
+  changed_when: false
+
+- name: Установить Helm 3
+  ansible.builtin.shell: |
+    if ! command -v helm >/dev/null 2>&1; then
+      curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Проверить Helm
+  ansible.builtin.command: helm version --short
+  environment: "{{ k8s_env }}"
+  changed_when: false
+
+
+# Установка и/или обновление плагина helm-diff для улучшенной идемпотентности kubernetes.core.helm
+- name: Проверить список плагинов Helm (под root)
+  ansible.builtin.command: helm plugin list
+  environment:
+    HOME: "/root"
+    PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  register: helm_plugins_list
+  changed_when: false
+  failed_when: false
+
+- name: Получить установленную версию helm-diff (если установлен)
+  ansible.builtin.shell: |
+    set -o pipefail
+    helm plugin list | awk '$1 == "diff" {print $2}'
+  args:
+    executable: /bin/bash
+  environment:
+    HOME: "/root"
+    PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  register: helm_diff_current
+  changed_when: false
+  failed_when: false
+
+- name: Установить плагин helm-diff {{ helm_diff_version }} (если отсутствует)
+  ansible.builtin.command: >-
+    helm plugin install https://github.com/databus23/helm-diff --version {{ helm_diff_version }}
+  environment:
+    HOME: "/root"
+    PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  when: helm_diff_current.stdout | length == 0
+
+- name: Переустановить helm-diff до версии {{ helm_diff_version }} при несовпадении версии
+  ansible.builtin.shell: |
+    set -e
+    helm plugin remove diff || true
+    helm plugin install https://github.com/databus23/helm-diff --version {{ helm_diff_version }}
+  args:
+    executable: /bin/bash
+  environment:
+    HOME: "/root"
+    PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  when: helm_diff_current.stdout | length > 0 and helm_diff_current.stdout != helm_diff_version

@@ -81,6 +81,14 @@ resource "yandex_vpc_security_group" "sg" {
     v4_cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # Входящий трафик: HTTPS для Minikube API
+  ingress {
+    description    = "HTTPS - API Minikube"
+    protocol       = "TCP"
+    port           = 8443
+    v4_cidr_blocks = ["0.0.0.0/0"]
+  }
+
   # Исходящий трафик: разрешаем всё (важно для скачивания образов Docker)
   egress {
     description    = "Весь исходящий трафик"

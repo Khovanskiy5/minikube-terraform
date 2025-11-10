@@ -26,10 +26,11 @@
         --driver=docker \
         --container-runtime=docker \
         --profile=minikube \
+        --apiserver-ips=127.0.0.1,{{ inventory_hostname }} \
         --listen-address=0.0.0.0 \
-        --apiserver-ips={{ hostvars[inventory_hostname].ansible_default_ipv4.address }} \
-        --apiserver-name={{ inventory_hostname }}
-      ExecStop=/usr/local/bin/minikube stop --profile=minikube
+        --apiserver-port=8443 \
+        --ports=0.0.0.0:8443:8443/tcp
+      ExecStop=/usr/local/bin/minikube stop
 
       [Install]
       WantedBy=multi-user.target

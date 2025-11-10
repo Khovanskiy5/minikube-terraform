@@ -1,6 +1,6 @@
 ---
 # Создание и активация systemd юнитов для minikube и minikube-tunnel
-- name: Юнит systemd minikube
+- name: Создать юнит systemd для minikube
   ansible.builtin.copy:
     dest: "{{ minikube_unit_path }}"
     mode: '0644'
@@ -22,13 +22,19 @@
       Environment="MINIKUBE_HOME={{ minikube_home }}"
       Environment="KUBECONFIG={{ kubeconfig_path }}"
       Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-      ExecStart=/usr/local/bin/minikube start --driver=docker --container-runtime=docker --profile=minikube
+      ExecStart=/usr/local/bin/minikube start \
+        --driver=docker \
+        --container-runtime=docker \
+        --profile=minikube \
+        --listen-address=0.0.0.0 \
+        --apiserver-ips={{ hostvars[inventory_hostname].ansible_default_ipv4.address }} \
+        --apiserver-name={{ inventory_hostname }}
       ExecStop=/usr/local/bin/minikube stop --profile=minikube
 
       [Install]
       WantedBy=multi-user.target
 
-- name: Юнит systemd minikube-tunnel
+- name: Создать юнит systemd для minikube-tunnel
   ansible.builtin.copy:
     dest: "{{ tunnel_unit_path }}"
     mode: '0644'
@@ -59,9 +65,7 @@
   ansible.builtin.systemd:
     daemon_reload: yes
 
-# ВАЖНО: До запуска сервиса minikube убедимся, что каталоги и kubeconfig
-# принадлежат целевому пользователю. Иначе minikube падает с HOST_HOME_PERMISSION.
-- name: Убедиться, что каталоги kube принадлежат пользователю перед запуском
+- name: Убедиться, что директории принадлежат пользователю
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
@@ -73,7 +77,7 @@
     - "{{ kube_home }}/.kube"
     - "{{ minikube_home }}"
 
-- name: Исправить права kubeconfig
+- name: Обновить права kubeconfig при необходимости
   ansible.builtin.file:
     path: "{{ kubeconfig_path }}"
     owner: "{{ kube_user }}"
@@ -81,13 +85,13 @@
     mode: '0644'
   when: kubeconfig_path is defined
 
-- name: Включить и запустить minikube
+- name: Запустить и включить minikube
   ansible.builtin.systemd:
     name: minikube
     enabled: yes
     state: started
 
-- name: Включить и запустить minikube-tunnel
+- name: Запустить и включить minikube-tunnel
   ansible.builtin.systemd:
     name: minikube-tunnel
     enabled: yes
